@@ -21,8 +21,8 @@ jobs:
           # 22.04: a core built against its glibc (2.35) loads on most distributions
           - {name: Linux x86_64, os: ubuntu-22.04, artifact: towns_libretro-linux-x86_64, lib: towns_libretro.so}
           - {name: Linux aarch64, os: ubuntu-22.04-arm, artifact: towns_libretro-linux-aarch64, lib: towns_libretro.so}
-          - {name: macOS arm64, os: macos-15, artifact: towns_libretro-macos-arm64, lib: towns_libretro.so, cmake: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15'}
-          - {name: macOS x86_64, os: macos-15-intel, artifact: towns_libretro-macos-x86_64, lib: towns_libretro.so, cmake: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15'}
+          - {name: macOS arm64, os: macos-15, artifact: towns_libretro-macos-arm64, lib: towns_libretro.dylib, cmake: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15'}
+          - {name: macOS x86_64, os: macos-15-intel, artifact: towns_libretro-macos-x86_64, lib: towns_libretro.dylib, cmake: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15'}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -36,8 +36,7 @@ jobs:
           set -e
           lib=build/main_libretro/${{ matrix.lib }}
           if [ "$RUNNER_OS" = macOS ]; then
-            # CMake names a MODULE/SHARED library .so here; RetroArch looks for .dylib
-            mv "$lib" towns_libretro.dylib; lib=towns_libretro.dylib
+            cp "$lib" .; lib=towns_libretro.dylib
             lipo -info "$lib"; otool -L "$lib"
             nm -gU "$lib" | grep ' _retro_' | wc -l
           else
