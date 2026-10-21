@@ -77,3 +77,12 @@ if(WIN32)
     # Windows DLL 默认不导出符号，需要 .def 文件列出所有 retro_* 导出项
     target_sources(towns_libretro PRIVATE libretro.def)
 endif()
+
+# The libretro buildbot (.gitlab-ci.yml) builds the target <corename>_libretro
+# and takes the file of that name, and the core is called tsugaru there. This
+# builds towns_libretro and puts a copy named tsugaru_libretro beside it.
+add_custom_target(tsugaru_libretro
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:towns_libretro>
+            $<TARGET_FILE_DIR:towns_libretro>/tsugaru_libretro${CMAKE_SHARED_LIBRARY_SUFFIX}
+    DEPENDS towns_libretro
+    VERBATIM)
