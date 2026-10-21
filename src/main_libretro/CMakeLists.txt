@@ -45,8 +45,11 @@ if(WIN32)
         "-static")
 else()
     # 非 Windows：towns 已 PUBLIC 传递 cpu/vmbase/device 等；按需要补 leaf 库。
+    # Sound goes out through libretro, so the core takes yssimplesound's
+    # no-device backend: the platform one would link ALSA (Linux) or
+    # AVFoundation (macOS) into the core for nothing.
     target_link_libraries(towns_libretro
-        towns osinit outside_world yssimplesound filesys)
+        towns osinit outside_world yssimplesound_nownd filesys)
 endif()
 
 set_target_properties(towns_libretro PROPERTIES
@@ -55,8 +58,19 @@ set_target_properties(towns_libretro PROPERTIES
 
 if(UNIX)
     # 现代 glibc 中 pthread 已并入 libc；老版本仍需显式链接
-    target_link_libraries(towns_libretro pthread)
+    # (Threads::Threads rather than -lpthread: Android has no libpthread)
+    target_link_libraries(towns_libretro Threads::Threads)
     target_compile_options(towns_libretro PRIVATE -Wno-unused-variable -Wno-unused-parameter)
+endif()
+
+if(UNIX AND NOT APPLE)
+    # Only the retro_* entry points are exported, and the core's calls bind to
+    # its own symbols: a frontend dlopens it next to libraries of its own.
+    target_link_options(towns_libretro PRIVATE
+        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/link.T" "-Wl,-Bsymbolic")
+elseif(APPLE)
+    target_link_options(towns_libretro PRIVATE
+        "-Wl,-exported_symbol,_retro_*")
 endif()
 
 if(WIN32)

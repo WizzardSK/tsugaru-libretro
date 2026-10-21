@@ -7,6 +7,8 @@ project(TSUGARU)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(Threads REQUIRED)
+
 # MinGW / Clang 兼容：把 MSVC 专属内建 shim 强制注入每个编译单元。
 # 目前仅 __assume(0) 需要（全仓库都表示"此处不可达"，映射到 __builtin_unreachable）。
 if(NOT MSVC)

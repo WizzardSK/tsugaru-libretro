@@ -1,0 +1,110 @@
+name: libretro core
+
+# Builds towns_libretro for every platform RetroArch runs on. The Windows
+# build is the one build_libretro_win.ps1 makes (MSYS2 MinGW, statically
+# linked); the others build the same CMake target with the platform's own
+# toolchain. Each job checks that the core exports the libretro API and lists
+# the libraries it needs at run time.
+on:
+  push:
+  pull_request:
+    branches: [ libretro ]
+  workflow_dispatch:
+
+jobs:
+  unix:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04: a core built against its glibc (2.35) loads on most distributions
+          - {name: Linux x86_64, os: ubuntu-22.04, artifact: towns_libretro-linux-x86_64, lib: towns_libretro.so}
+          - {name: Linux aarch64, os: ubuntu-22.04-arm, artifact: towns_libretro-linux-aarch64, lib: towns_libretro.so}
+          - {name: macOS arm64, os: macos-15, artifact: towns_libretro-macos-arm64, lib: towns_libretro.so, cmake: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15'}
+          - {name: macOS x86_64, os: macos-15-intel, artifact: towns_libretro-macos-x86_64, lib: towns_libretro.so, cmake: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15'}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build
+        run: |
+          cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_LIBRETRO=ON \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON ${{ matrix.cmake }}
+          cmake --build build --target towns_libretro --parallel 4
+      - name: Check
+        run: |
+          set -e
+          lib=build/main_libretro/${{ matrix.lib }}
+          if [ "$RUNNER_OS" = macOS ]; then
+            # CMake names a MODULE/SHARED library .so here; RetroArch looks for .dylib
+            mv "$lib" towns_libretro.dylib; lib=towns_libretro.dylib
+            lipo -info "$lib"; otool -L "$lib"
+            nm -gU "$lib" | grep ' _retro_' | wc -l
+          else
+            cp "$lib" .; lib=towns_libretro.so
+            readelf -d "$lib" | grep NEEDED
+            nm -D --defined-only "$lib" | grep -c ' retro_'
+            nm -D --defined-only "$lib" | grep -v ' retro_' || true
+          fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            towns_libretro.so
+            towns_libretro.dylib
+            src/main_libretro/towns_libretro.info
+          if-no-files-found: ignore
+
+  android:
+    name: Android ${{ matrix.abi }}
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86_64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build
+        run: |
+          cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_LIBRETRO=ON \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-21 -DANDROID_STL=c++_static
+          cmake --build build --target towns_libretro --parallel 4
+      - name: Check
+        run: |
+          set -e
+          tools=$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+          cp build/main_libretro/towns_libretro.so towns_libretro_android.so
+          $tools/llvm-strip towns_libretro_android.so
+          $tools/llvm-readelf -d towns_libretro_android.so | grep NEEDED
+          $tools/llvm-nm -D --defined-only towns_libretro_android.so | grep -c ' retro_'
+      - uses: actions/upload-artifact@v6
+        with:
+          name: towns_libretro-android-${{ matrix.abi }}
+          path: towns_libretro_android.so
+
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake make
+      - name: Build
+        run: |
+          cmake -S src -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_LIBRETRO=ON
+          cmake --build build --target towns_libretro --parallel 4
+      - name: Check
+        run: |
+          cp build/main_libretro/towns_libretro.dll .
+          objdump -p towns_libretro.dll | grep "DLL Name"
+          objdump -p towns_libretro.dll | grep -c " retro_"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: towns_libretro-windows-x86_64
+          path: towns_libretro.dll
