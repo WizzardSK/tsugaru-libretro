@@ -13,6 +13,9 @@ find_package(Threads REQUIRED)
 # 目前仅 __assume(0) 需要（全仓库都表示"此处不可达"，映射到 __builtin_unreachable）。
 if(NOT MSVC)
 	add_compile_options(-include "${CMAKE_CURRENT_SOURCE_DIR}/msvc_compat.h")
+	# char is signed on x86 and on Apple's arm64, unsigned on Linux and
+	# Android ARM; the emulator was written where it is signed.
+	add_compile_options(-fsigned-char)
 endif()
 
 if(UNIX)
